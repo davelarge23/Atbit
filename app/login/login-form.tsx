@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { Logo } from "@/components/logo";
+import { BusyLabel } from "@/components/spinner";
 import { authenticate, type AuthState } from "./actions";
 
 export default function LoginForm({ confirmError }: { confirmError: boolean }) {
@@ -46,7 +47,7 @@ export default function LoginForm({ confirmError }: { confirmError: boolean }) {
         {state.error && <p role="alert" className="rounded-lg bg-rose-soft px-3 py-2 text-sm text-rose">{state.error}</p>}
         {state.notice && <p role="status" className="rounded-lg bg-brand-soft px-3 py-2 text-sm text-brand">{state.notice}</p>}
         <button className="btn-primary" disabled={pending}>
-          {pending ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}
+          <BusyLabel busy={pending} busyLabel={mode === "login" ? "Signing in…" : "Creating account…"} label={mode === "login" ? "Sign in" : "Create account"} />
         </button>
       </form>
 

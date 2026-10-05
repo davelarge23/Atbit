@@ -43,13 +43,14 @@ export default async function TransactionsPage({ searchParams }: PageProps<"/tra
       .order(sort, { ascending: asc })
       .order("created_at", { ascending: false })
       .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1),
-    build("type, amount, category"),
+    build("type, amount, category, funds_source"),
   ]);
 
   const txs = ((list.data ?? []) as unknown as Transaction[]).map((t) => ({ ...t, amount: Number(t.amount) }));
   const count = list.count ?? 0;
   const pages = Math.max(1, Math.ceil(count / PAGE_SIZE));
-  const all = (totals.data ?? []) as unknown as Pick<Transaction, "type" | "amount" | "category">[];
+  // Card charges aren't cash movements; they count when the card is paid.
+  const all = ((totals.data ?? []) as unknown as Pick<Transaction, "type" | "amount" | "category" | "funds_source">[]).filter((t) => t.funds_source !== "card");
   const income = all.filter((t) => t.type === "income").reduce((s, t) => s + Number(t.amount), 0);
   const expenses = all.filter((t) => t.type === "expense").reduce((s, t) => s + Number(t.amount), 0);
 

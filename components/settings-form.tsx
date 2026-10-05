@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect } from "react";
 import { useFeedback } from "@/components/feedback";
+import { BusyLabel } from "@/components/spinner";
 import { saveSettings, type SettingsState } from "@/app/(app)/actions";
 import { CURRENCIES, type Profile } from "@/lib/types";
 
@@ -42,7 +43,7 @@ export function SettingsForm({ profile, email, dark, large, motion }: { profile:
       </section>
 
       {state.error && <p role="alert" className="rounded-lg bg-rose-soft px-3 py-2 text-sm text-rose">{state.error}</p>}
-      <button className="btn-primary self-start" disabled={pending}>{pending ? "Saving…" : "Save changes"}</button>
+      <button className="btn-primary self-start" disabled={pending}><BusyLabel busy={pending} label="Save changes" /></button>
     </form>
   );
 }

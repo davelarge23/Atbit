@@ -63,6 +63,9 @@ export const CATEGORY_META: Record<
   },
 };
 
+export type FundsSource = "cash" | "loan" | "card";
+export type TxOrigin = "payment" | "loan" | "card";
+
 export type Transaction = {
   id: string;
   type: TxType;
@@ -71,6 +74,10 @@ export type Transaction = {
   description: string;
   occurred_on: string;
   source: "manual" | "voice";
+  funds_source: FundsSource;
+  origin: TxOrigin | null;
+  detail: string | null;
+  reminder_id: string | null;
   created_at: string;
 };
 

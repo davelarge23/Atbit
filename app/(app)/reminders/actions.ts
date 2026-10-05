@@ -110,7 +110,15 @@ export async function markReminderPaid(id: string, log: boolean): Promise<{ erro
   const { data: r } = await supabase.from("reminders").select("*").eq("id", id).eq("user_id", user.id).eq("status", "active").maybeSingle();
   if (!r) return { error: "That item is no longer active." };
 
+  const paid = r.installments_paid + 1;
+
   if (log) {
+    let detail = "Monthly subscription";
+    if (r.kind === "installment") detail = r.installments_total ? `Installment ${paid} of ${r.installments_total}` : "Installment payment";
+    if (r.kind === "card") {
+      const { data: card } = r.card_id ? await supabase.from("credit_cards").select("name").eq("id", r.card_id).maybeSingle() : { data: null };
+      detail = card ? `Credit card item · ${card.name}` : "Credit card item";
+    }
     const { error } = await supabase.from("transactions").insert({
       user_id: user.id,
       type: "expense",
@@ -119,11 +127,13 @@ export async function markReminderPaid(id: string, log: boolean): Promise<{ erro
       description: r.title,
       occurred_on: todayPH(),
       source: "manual",
+      origin: "payment",
+      detail,
+      reminder_id: r.id,
     });
     if (error) return { error: "Couldn't log the payment." };
   }
 
-  const paid = r.installments_paid + 1;
   const finished = r.installments_total !== null && paid >= r.installments_total;
   let error;
   if (r.recurrence === "once") {
@@ -159,6 +169,8 @@ export async function markCardPaid(cardId: string, log: boolean): Promise<{ erro
       description: `${card.name} payment`,
       occurred_on: todayPH(),
       source: "manual",
+      origin: "payment",
+      detail: `Credit card payment · ${items.length} item${items.length === 1 ? "" : "s"}`,
     });
     if (error) return { error: "Couldn't log the payment." };
   }

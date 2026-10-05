@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LogOut, Mic, Plus } from "lucide-react";
+import { Mic, Plus } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { useLog } from "@/components/log-dialog";
+import { NavLink } from "@/components/nav-link";
+import { SignOutButton } from "@/components/sign-out-button";
 import { signOut } from "@/app/(app)/actions";
 
 const LINKS = [
@@ -28,11 +30,11 @@ export function TopNav({ name, dueCount }: { name: string; dueCount: number }) {
             {LINKS.map((l) => {
               const active = l.href === "/" ? pathname === "/" : pathname.startsWith(l.href);
               return (
-                <Link key={l.href} href={l.href} aria-current={active ? "page" : undefined}
+                <NavLink key={l.href} href={l.href} active={active}
                   className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors ${active ? "bg-track text-ink" : "text-muted hover:bg-track hover:text-ink"}`}>
                   {l.label}
                   {l.href === "/reminders" && dueCount > 0 && <span className="ml-1.5 rounded-full bg-rose px-1.5 py-0.5 text-[10px] font-bold text-white">{dueCount}</span>}
-                </Link>
+                </NavLink>
               );
             })}
           </nav>
@@ -48,7 +50,7 @@ export function TopNav({ name, dueCount }: { name: string; dueCount: number }) {
             {name.charAt(0).toUpperCase()}
           </span>
           <form action={signOut}>
-            <button aria-label="Sign out" title="Sign out" className="rounded-full p-1.5 text-muted hover:bg-track hover:text-ink"><LogOut size={16} /></button>
+            <SignOutButton />
           </form>
         </div>
       </div>
@@ -56,7 +58,7 @@ export function TopNav({ name, dueCount }: { name: string; dueCount: number }) {
         {LINKS.map((l) => {
           const active = l.href === "/" ? pathname === "/" : pathname.startsWith(l.href);
           return (
-            <Link key={l.href} href={l.href} className={`whitespace-nowrap rounded-lg px-3 py-1 text-sm font-semibold ${active ? "bg-track" : "text-muted"}`}>{l.label}{l.href === "/reminders" && dueCount > 0 && <span className="ml-1.5 rounded-full bg-rose px-1.5 py-0.5 text-[10px] font-bold text-white">{dueCount}</span>}</Link>
+            <NavLink key={l.href} href={l.href} active={active} className={`whitespace-nowrap rounded-lg px-3 py-1 text-sm font-semibold ${active ? "bg-track" : "text-muted"}`}>{l.label}{l.href === "/reminders" && dueCount > 0 && <span className="ml-1.5 rounded-full bg-rose px-1.5 py-0.5 text-[10px] font-bold text-white">{dueCount}</span>}</NavLink>
           );
         })}
       </nav>

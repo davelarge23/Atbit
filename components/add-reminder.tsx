@@ -5,6 +5,7 @@ import { Plus } from "lucide-react";
 import { saveCard, saveReminder, type CardState, type ReminderState } from "@/app/(app)/reminders/actions";
 import { useFeedback } from "@/components/feedback";
 import { Modal } from "@/components/modal";
+import { BusyLabel } from "@/components/spinner";
 import { currencySymbol, dateLabel } from "@/lib/format";
 import { installmentDue, KIND_META, KINDS, ordinal, type CreditCard, type ReminderKind } from "@/lib/reminders";
 
@@ -131,7 +132,7 @@ function AddDialog({ currency, today, cards, onClose }: { currency: string; toda
           {state.error && <p role="alert" className="rounded-lg bg-rose-soft px-3 py-2 text-sm text-rose">{state.error}</p>}
           <div className="flex justify-end gap-2">
             <button type="button" className="btn-secondary" onClick={onClose}>Cancel</button>
-            <button className="btn-primary" disabled={pending || (kind === "card" && !cardId)}>{pending ? "Saving…" : `Add ${KIND_META[kind].label.toLowerCase()}`}</button>
+            <button className="btn-primary" disabled={pending || (kind === "card" && !cardId)}><BusyLabel busy={pending} label={`Add ${KIND_META[kind].label.toLowerCase()}`} /></button>
           </div>
         </form>
       </Modal>
@@ -140,7 +141,7 @@ function AddDialog({ currency, today, cards, onClose }: { currency: string; toda
   );
 }
 
-function CardDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
+export function CardDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
   const [state, action, pending] = useActionState<CardState, FormData>(saveCard, {});
   const { toast } = useFeedback();
 
@@ -164,7 +165,7 @@ function CardDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (i
         {state.error && <p role="alert" className="rounded-lg bg-rose-soft px-3 py-2 text-sm text-rose">{state.error}</p>}
         <div className="flex justify-end gap-2">
           <button type="button" className="btn-secondary" onClick={onClose}>Cancel</button>
-          <button className="btn-primary" disabled={pending}>{pending ? "Saving…" : "Save card"}</button>
+          <button className="btn-primary" disabled={pending}><BusyLabel busy={pending} label="Save card" /></button>
         </div>
       </form>
     </Modal>

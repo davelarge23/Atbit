@@ -24,6 +24,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/">) {
     supabase
       .from("transactions")
       .select("type, amount, category, occurred_on")
+      .neq("funds_source", "card")
       .gte("occurred_on", firstOfMonth(prev.year, prev.month) < `${year}-01-01` ? firstOfMonth(prev.year, prev.month) : `${year}-01-01`)
       .lt("occurred_on", `${year + 1}-01-01`),
     supabase.from("transactions").select("*").order("occurred_on", { ascending: false }).order("created_at", { ascending: false }).limit(6),

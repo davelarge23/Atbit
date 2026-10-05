@@ -17,11 +17,15 @@ export default async function InsightsPage() {
   const cur = profile.currency;
   const now = parseMonth();
   const next = shiftMonth(now.year, now.month, 1);
-  const { data } = await supabase
-    .from("transactions")
-    .select("type, amount, category")
-    .gte("occurred_on", firstOfMonth(now.year, now.month))
-    .lt("occurred_on", firstOfMonth(next.year, next.month));
+  const [{ data }, { data: rems }] = await Promise.all([
+    supabase
+      .from("transactions")
+      .select("type, amount, category")
+      .neq("funds_source", "card")
+      .gte("occurred_on", firstOfMonth(now.year, now.month))
+      .lt("occurred_on", firstOfMonth(next.year, next.month)),
+    supabase.from("reminders").select("amount, status"),
+  ]);
 
   const rows = data ?? [];
   const income = rows.filter((r) => r.type === "income").reduce((s, r) => s + Number(r.amount), 0);
@@ -43,7 +47,7 @@ export default async function InsightsPage() {
         <p className="text-sm text-muted">Budget rules and how your {monthLabel(now.year, now.month)} measures up.</p>
       </div>
 
-      <AiInsights cacheKey={`ai-insights-${now.key}-${rows.length}-${Math.round(income + needs + wants + savings)}`} />
+      <AiInsights cacheKey={`ai-insights-${now.key}-${rows.length}-${Math.round(income + needs + wants + savings)}-${(rems ?? []).length}-${Math.round((rems ?? []).reduce((s, r) => s + Number(r.amount), 0))}`} />
 
       <section className="card p-6">
         <h2 className="text-lg font-semibold tracking-tight">The 50 / 30 / 20 rule</h2>

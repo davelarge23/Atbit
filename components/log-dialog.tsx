@@ -3,13 +3,17 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Mic, Square, X } from "lucide-react";
+import { BusyLabel } from "@/components/spinner";
 import { Waveform } from "@/components/waveform";
 import { useFeedback } from "@/components/feedback";
-import { saveTransaction, deleteTransaction } from "@/app/(app)/actions";
-import { currencySymbol, money, todayISO } from "@/lib/format";
+import { saveTransaction, saveLoanIncome, saveCardExpense, deleteTransaction } from "@/app/(app)/actions";
+import { CardDialog } from "@/components/add-reminder";
+import { currencySymbol, dateLabel, money, todayISO } from "@/lib/format";
+import { installmentDue, ordinal, type CreditCard } from "@/lib/reminders";
 import {
   CATEGORY_META,
   type Category,
+  type FundsSource,
   categoriesFor,
   type Transaction,
   type TxInput,
@@ -33,19 +37,21 @@ const blank = (): Draft => ({ type: "expense", amount: "", category: "groceries"
 
 export type Suggestion = { type: TxType; amount: number; category: Category; description: string };
 
-export function LogProvider({ children, voiceEnabled, currency, history }: { children: React.ReactNode; voiceEnabled: boolean; currency: string; history: Suggestion[] }) {
+export function LogProvider({ children, voiceEnabled, currency, history, cards }: { children: React.ReactNode; voiceEnabled: boolean; currency: string; history: Suggestion[]; cards: CreditCard[] }) {
   const [state, setState] = useState<{ mode: Mode; tx?: Transaction; text?: string; nonce: number } | null>(null);
   const open = useCallback((mode: Mode, tx?: Transaction, text?: string) => setState((s) => ({ mode, tx, text, nonce: (s?.nonce ?? 0) + 1 })), []);
 
   return (
     <LogContext.Provider value={{ open, voiceEnabled }}>
       {children}
-      {state && <LogDialog key={state.nonce} {...state} voiceEnabled={voiceEnabled} currency={currency} history={history} onClose={() => setState(null)} />}
+      {state && <LogDialog key={state.nonce} {...state} voiceEnabled={voiceEnabled} currency={currency} history={history} cards={cards} onClose={() => setState(null)} />}
     </LogContext.Provider>
   );
 }
 
-function LogDialog({ mode, tx, text: initialText, voiceEnabled, currency, history, onClose }: { mode: Mode; tx?: Transaction; text?: string; voiceEnabled: boolean; currency: string; history: Suggestion[]; onClose: () => void }) {
+const NEW_CARD = "__new";
+
+function LogDialog({ mode, tx, text: initialText, voiceEnabled, currency, history, cards, onClose }: { mode: Mode; tx?: Transaction; text?: string; voiceEnabled: boolean; currency: string; history: Suggestion[]; cards: CreditCard[]; onClose: () => void }) {
   const router = useRouter();
   const symbol = currencySymbol(currency);
   const { toast, confirm } = useFeedback();
@@ -58,6 +64,14 @@ function LogDialog({ mode, tx, text: initialText, voiceEnabled, currency, histor
   const [busy, setBusy] = useState<null | "transcribing" | "parsing" | "saving">(null);
   const [recording, setRecording] = useState(false);
   const [saving, startSave] = useTransition();
+  // Where the money comes from (income) or goes (expense). Only chosen for new entries.
+  const [fund, setFund] = useState<FundsSource>("cash");
+  const [loanName, setLoanName] = useState("");
+  const [repayment, setRepayment] = useState("");
+  const [months, setMonths] = useState("");
+  const [cardId, setCardId] = useState(cards[0]?.id ?? "");
+  const [cardPopup, setCardPopup] = useState(false);
+  const closeCardPopup = useCallback(() => setCardPopup(false), []);
   const recorder = useRef<MediaRecorder | null>(null);
   const stream = useRef<MediaStream | null>(null);
 
@@ -67,10 +81,11 @@ function LogDialog({ mode, tx, text: initialText, voiceEnabled, currency, histor
   const [seconds, setSeconds] = useState(0);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    // The card popup handles its own Escape.
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && !cardPopup && onClose();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onClose, cardPopup]);
 
   useEffect(() => {
     cancelled.current = false;
@@ -230,14 +245,25 @@ function LogDialog({ mode, tx, text: initialText, voiceEnabled, currency, histor
       if (!ok) return;
     }
     startSave(async () => {
-      const res = await saveTransaction({ ...draft, amount: Number(draft.amount) } as Partial<TxInput>);
+      const amountNum = Number(draft.amount);
+      const loan = !draft.id && draft.type === "income" && fund === "loan";
+      const card = !draft.id && draft.type === "expense" && fund === "card";
+      const res = loan
+        ? await saveLoanIncome({ name: loanName, amount: amountNum, repayment: Number(repayment), start_date: draft.occurred_on, months: Number(months) })
+        : card
+          ? await saveCardExpense({ amount: amountNum, description: draft.description, category: draft.category as Category, occurred_on: draft.occurred_on, card_id: cardId })
+          : await saveTransaction({ ...draft, amount: amountNum } as Partial<TxInput>);
       if (res.error) {
         setError(res.error);
         toast(res.error, "error");
         return;
       }
-      const amount = money(Number(draft.amount), currency);
-      toast(draft.id ? "Transaction updated." : `${draft.type === "income" ? "Income" : draft.type === "savings" ? "Savings" : "Expense"} of ${amount} added.`);
+      const amount = money(amountNum, currency);
+      toast(
+        loan ? `Loan of ${amount} added to cash and installment created.`
+          : card ? `${amount} charged to card and added to its items.`
+          : draft.id ? "Transaction updated." : `${draft.type === "income" ? "Income" : draft.type === "savings" ? "Savings" : "Expense"} of ${amount} added.`,
+      );
       router.refresh();
       onClose();
     });
@@ -266,6 +292,11 @@ function LogDialog({ mode, tx, text: initialText, voiceEnabled, currency, histor
   }
 
   const categories = categoriesFor(draft.type);
+  const loanMode = !draft.id && draft.type === "income" && fund === "loan";
+  const cardMode = !draft.id && draft.type === "expense" && fund === "card";
+  const sourceChoices: FundsSource[] | null = draft.id ? null : draft.type === "income" ? ["cash", "loan"] : draft.type === "expense" ? ["cash", "card"] : null;
+  const planTotal = Number(repayment) * Number(months);
+  const received = Number(draft.amount);
 
   const query = draft.description.trim().toLowerCase();
   const suggestions =
@@ -289,6 +320,7 @@ function LogDialog({ mode, tx, text: initialText, voiceEnabled, currency, histor
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setDraft((d) => ({ ...d, [k]: v }));
 
   return (
+    <>
     <div className="fixed inset-0 z-[60] flex items-end justify-center bg-ink/40 p-4 backdrop-blur-sm sm:items-center" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div role="dialog" aria-modal="true" aria-label="Log transaction" className="w-full max-w-md rounded-3xl border border-line bg-card p-6 shadow-float">
         <div className="flex items-start justify-between">
@@ -329,19 +361,72 @@ function LogDialog({ mode, tx, text: initialText, voiceEnabled, currency, histor
             <div className="grid grid-cols-3 gap-1 rounded-lg bg-track p-1" role="radiogroup" aria-label="Type">
               {(["expense", "income", "savings"] as const).map((t) => (
                 <button key={t} type="button" role="radio" aria-checked={draft.type === t}
-                  onClick={() => setDraft((d) => ({ ...d, type: t, category: categoriesFor(t)[0] }))}
+                  onClick={() => { setDraft((d) => ({ ...d, type: t, category: categoriesFor(t)[0] })); setFund("cash"); }}
                   className={`rounded-md py-1.5 text-sm font-semibold capitalize transition ${draft.type === t ? "bg-card shadow-card" : "text-muted"}`}>
                   {t}
                 </button>
               ))}
             </div>
             <label className="flex flex-col gap-1 text-sm font-medium">
-              Amount
+              {loanMode ? "Loan amount received" : "Amount"}
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted">{symbol}</span>
                 <input className="field pl-8" inputMode="decimal" type="number" step="0.01" min="0.01" required value={draft.amount} onChange={(e) => set("amount", e.target.value)} autoFocus />
               </div>
             </label>
+            {sourceChoices && (
+              <div className="flex flex-col gap-1 text-sm font-medium">
+                {draft.type === "income" ? "Source" : "Paid with"}
+                <div className="grid grid-cols-2 gap-1 rounded-lg bg-track p-1" role="radiogroup" aria-label="Source">
+                  {sourceChoices.map((s) => (
+                    <button key={s} type="button" role="radio" aria-checked={fund === s} onClick={() => { setFund(s); if (s === "card" && cards.length === 0) setCardPopup(true); }}
+                      className={`rounded-md py-1.5 text-sm font-semibold capitalize transition ${fund === s ? "bg-card shadow-card" : "text-muted"}`}>
+                      {s}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs font-normal text-muted">
+                  {fund === "loan" ? "Adds the loan to your cash and creates an installment in Reminders."
+                    : fund === "card" ? "Not deducted from cash. It's added to the card's items and deducted when you pay the card."
+                    : draft.type === "income" ? "Added to your cash." : "Deducted from your cash."}
+                </p>
+              </div>
+            )}
+            {draft.id && tx?.origin && (
+              <p className="rounded-lg bg-track px-3 py-2 text-xs text-muted">
+                {tx.detail ?? "Created from Reminders"}. Changes here won&apos;t update the linked reminder.
+              </p>
+            )}
+            {loanMode && (
+              <>
+                <label className="flex flex-col gap-1 text-sm font-medium">Loan name
+                  <input className="field" maxLength={80} required value={loanName} onChange={(e) => setLoanName(e.target.value)} placeholder="e.g. Salary loan, SSS loan" />
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="flex flex-col gap-1 text-sm font-medium">Repayment / month
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted">{symbol}</span>
+                      <input className="field pl-8" inputMode="decimal" type="number" step="0.01" min="0.01" required value={repayment} onChange={(e) => setRepayment(e.target.value)} />
+                    </div>
+                  </label>
+                  <label className="flex flex-col gap-1 text-sm font-medium">Plan (months)
+                    <input className="field" type="number" min="1" max="600" step="1" required value={months} onChange={(e) => setMonths(e.target.value)} />
+                  </label>
+                </div>
+                <label className="flex flex-col gap-1 text-sm font-medium">Date started
+                  <input className="field" type="date" required value={draft.occurred_on} onChange={(e) => set("occurred_on", e.target.value)} />
+                </label>
+                {planTotal > 0 && (
+                  <p className="rounded-lg bg-track px-3 py-2 text-xs text-muted">
+                    Total repayment <span className="font-semibold text-ink">{money(planTotal, currency)}</span>
+                    {received > 0 && (planTotal >= received ? <> · interest &amp; fees <span className="font-semibold text-ink">{money(planTotal - received, currency)}</span></> : null)}
+                    {draft.occurred_on && Number(months) > 0 ? <> · first payment <span className="font-semibold text-ink">{dateLabel(installmentDue(draft.occurred_on, 0))}</span></> : null}
+                  </p>
+                )}
+              </>
+            )}
+            {!loanMode && (
+            <>
             <div className="relative flex flex-col gap-1 text-sm font-medium">
               <label htmlFor="log-description">Merchant / description</label>
               <input
@@ -387,15 +472,28 @@ function LogDialog({ mode, tx, text: initialText, voiceEnabled, currency, histor
                 <input className="field" type="date" required value={draft.occurred_on} onChange={(e) => set("occurred_on", e.target.value)} />
               </label>
             </div>
+            {cardMode && (
+              <label className="flex flex-col gap-1 text-sm font-medium">Credit card
+                <select className="field" required value={cardId} onChange={(e) => (e.target.value === NEW_CARD ? setCardPopup(true) : setCardId(e.target.value))}>
+                  {cards.length === 0 && <option value="">No cards yet</option>}
+                  {cards.map((c) => <option key={c.id} value={c.id}>{c.name} · due every {ordinal(c.due_day)}</option>)}
+                  <option value={NEW_CARD}>+ Add a new card…</option>
+                </select>
+              </label>
+            )}
+            </>
+            )}
             {error && <p role="alert" className="rounded-lg bg-rose-soft px-3 py-2 text-sm text-rose">{error}</p>}
             <div className="flex gap-2">
               {draft.id && <button type="button" onClick={remove} className="btn-secondary text-rose" disabled={saving}>Delete</button>}
-              <button className="btn-primary flex-1" disabled={saving}>{saving ? "Saving…" : draft.source === "voice" && !draft.id ? "Confirm & save" : "Save"}</button>
+              <button className="btn-primary flex-1" disabled={saving}><BusyLabel busy={saving} label={draft.source === "voice" && !draft.id ? "Confirm & save" : "Save"} /></button>
             </div>
           </form>
         )}
       </div>
     </div>
+    {cardPopup && <CardDialog onClose={closeCardPopup} onCreated={setCardId} />}
+    </>
   );
 }
 
