@@ -4,7 +4,8 @@ const CATEGORY_KEYWORDS: [RegExp, TxInput["category"]][] = [
   [/grocer|supermarket|market|trader joe|whole foods|walmart|costco|aldi/i, "groceries"],
   [/electric|water|internet|wifi|gas bill|utilit|phone bill|power|rent/i, "utilities"],
   [/loan|mortgage|credit card|debt|installment|student/i, "debts"],
-  [/coffee|dinner|lunch|movie|netflix|spotify|game|restaurant|bar\b|concert|shopping|cinema|dining/i, "leisure"],
+  [/subscription|netflix|spotify|youtube premium|disney|icloud|prime video/i, "subscriptions"],
+  [/coffee|dinner|lunch|movie|game|restaurant|bar\b|concert|shopping|cinema|dining/i, "leisure"],
 ];
 
 function ymd(d: Date) {

@@ -1,7 +1,7 @@
 export type TxType = "income" | "expense" | "savings";
-export type Category = "groceries" | "utilities" | "debts" | "leisure" | "salary" | "savings" | "other";
+export type Category = "groceries" | "utilities" | "debts" | "subscriptions" | "leisure" | "salary" | "savings" | "other";
 
-export const EXPENSE_CATEGORIES: Category[] = ["groceries", "utilities", "debts", "leisure", "other"];
+export const EXPENSE_CATEGORIES: Category[] = ["groceries", "utilities", "debts", "subscriptions", "leisure", "other"];
 export const INCOME_CATEGORIES: Category[] = ["salary", "other"];
 export const SAVINGS_CATEGORIES: Category[] = ["savings"];
 
@@ -30,6 +30,12 @@ export const CATEGORY_META: Record<
     color: "#e11d48",
     chip: "bg-rose-100 text-rose-800 dark:bg-rose-400/15 dark:text-rose-300",
     tile: "bg-rose-100 text-rose-700 dark:bg-rose-400/15 dark:text-rose-300",
+  },
+  subscriptions: {
+    label: "Subscriptions",
+    color: "#f59e0b",
+    chip: "bg-amber-100 text-amber-800 dark:bg-amber-400/15 dark:text-amber-300",
+    tile: "bg-amber-100 text-amber-700 dark:bg-amber-400/15 dark:text-amber-300",
   },
   leisure: {
     label: "Leisure / Wants",

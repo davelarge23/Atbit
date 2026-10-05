@@ -15,7 +15,7 @@ create table public.transactions (
   user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
   type text not null check (type in ('income', 'expense', 'savings')),
   amount numeric(12,2) not null check (amount > 0),
-  category text not null check (category in ('groceries','utilities','debts','leisure','salary','savings','other')),
+  category text not null check (category in ('groceries','utilities','debts','subscriptions','leisure','salary','savings','other')),
   description text not null default '',
   occurred_on date not null default current_date,
   source text not null default 'manual' check (source in ('manual', 'voice')),
@@ -59,15 +59,35 @@ language sql stable security invoker set search_path = '' as $$
     ), 0);
 $$;
 
--- Reminders for installments and recurring bills.
+-- Credit cards: a name and the day of the month the statement is due.
+create table public.credit_cards (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  name text not null check (char_length(name) between 1 and 40),
+  due_day int not null check (due_day between 1 and 31),
+  created_at timestamptz not null default now()
+);
+
+alter table public.credit_cards enable row level security;
+
+create policy "credit_cards: own select" on public.credit_cards for select using (user_id = (select auth.uid()));
+create policy "credit_cards: own insert" on public.credit_cards for insert with check (user_id = (select auth.uid()));
+create policy "credit_cards: own update" on public.credit_cards for update using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+create policy "credit_cards: own delete" on public.credit_cards for delete using (user_id = (select auth.uid()));
+
+-- Reminders for installments, credit card items and subscriptions.
 create table public.reminders (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  kind text not null default 'installment' check (kind in ('installment', 'card', 'subscription')),
   title text not null check (char_length(title) between 1 and 80),
   amount numeric(12,2) not null check (amount > 0),
   due_date date not null,
   due_day int not null check (due_day between 1 and 31),
   recurrence text not null default 'monthly' check (recurrence in ('once', 'monthly')),
+  start_date date,
+  card_id uuid references public.credit_cards (id) on delete cascade,
+  status text not null default 'active' check (status in ('active', 'paused', 'completed')),
   installments_total int check (installments_total is null or installments_total > 0),
   installments_paid int not null default 0 check (installments_paid >= 0),
   created_at timestamptz not null default now()

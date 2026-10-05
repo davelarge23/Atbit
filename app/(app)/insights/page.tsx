@@ -27,12 +27,12 @@ export default async function InsightsPage() {
   const income = rows.filter((r) => r.type === "income").reduce((s, r) => s + Number(r.amount), 0);
   const spend = (cats: string[]) => rows.filter((r) => r.type === "expense" && cats.includes(r.category)).reduce((s, r) => s + Number(r.amount), 0);
   const needs = spend(["groceries", "utilities", "debts"]);
-  const wants = spend(["leisure", "other"]);
+  const wants = spend(["subscriptions", "leisure", "other"]);
   const savings = rows.filter((r) => r.type === "savings").reduce((s, r) => s + Number(r.amount), 0);
 
   const buckets = [
     { name: "Needs", target: 50, actual: needs, note: "Groceries, utilities, debts", color: "bg-sky" },
-    { name: "Wants", target: 30, actual: wants, note: "Leisure & other", color: "bg-purple-500" },
+    { name: "Wants", target: 30, actual: wants, note: "Subscriptions, leisure & other", color: "bg-purple-500" },
     { name: "Savings", target: 20, actual: savings, note: "Logged savings", color: "bg-brand" },
   ];
 

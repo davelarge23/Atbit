@@ -6,8 +6,8 @@ import { Greeting, QuickLogBar, VoicePanel } from "@/components/dashboard-bits";
 import { TxRow } from "@/components/tx-row";
 import { firstOfMonth, money, monthLabel, parseMonth, pct, shiftMonth } from "@/lib/format";
 import { requireUser } from "@/lib/session";
-import { ReminderRow } from "@/components/reminder-row";
-import { addDaysISO, daysUntil, todayPH, type Reminder } from "@/lib/reminders";
+import { ReminderSummary } from "@/components/reminder-summary";
+import { addDaysISO, REMIND_DAYS, todayPH, type Reminder } from "@/lib/reminders";
 import { EXPENSE_CATEGORIES, type Category, type Transaction } from "@/lib/types";
 
 export default async function Dashboard({ searchParams }: PageProps<"/">) {
@@ -20,7 +20,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/">) {
 
   const today = todayPH();
   const [remindersRes, yearRows, recent, carry] = await Promise.all([
-    supabase.from("reminders").select("*").order("due_date", { ascending: true }).limit(20),
+    supabase.from("reminders").select("kind, amount, due_date").eq("status", "active").lte("due_date", addDaysISO(today, REMIND_DAYS)),
     supabase
       .from("transactions")
       .select("type, amount, category, occurred_on")
@@ -30,10 +30,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/">) {
     supabase.rpc("carryover_balance", { p_month: firstOfMonth(year, month) }),
   ]);
 
-  const reminders = ((remindersRes.data ?? []) as Reminder[]).map((r) => ({ ...r, amount: Number(r.amount) }));
-  const urgent = reminders.filter((r) => r.due_date <= addDaysISO(today, 7));
-  const overdue = urgent.filter((r) => daysUntil(r.due_date, today) < 0).length;
-  const shownReminders = (urgent.length ? urgent : reminders.slice(0, 2)).slice(0, 4);
+  const due = ((remindersRes.data ?? []) as Pick<Reminder, "kind" | "amount" | "due_date">[]).map((r) => ({ ...r, amount: Number(r.amount) }));
 
   const rows = (yearRows.data ?? []) as Pick<Transaction, "type" | "amount" | "category" | "occurred_on">[];
   const inMonth = (r: { occurred_on: string }, y: number, m: number) => r.occurred_on.startsWith(`${y}-${String(m).padStart(2, "0")}`);
@@ -81,25 +78,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/">) {
 
       <QuickLogBar />
 
-      {shownReminders.length > 0 && (
-        <section className={`card p-5 ${overdue ? "border-rose" : ""}`} aria-label="Reminders">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h2 className="flex items-center gap-2 text-lg font-semibold tracking-tight">
-                Reminders
-                {urgent.length > 0 && (
-                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${overdue ? "bg-rose-soft text-rose" : "bg-amber-100 text-amber-800 dark:bg-amber-400/15 dark:text-amber-300"}`}>
-                    {overdue ? `${overdue} overdue` : `${urgent.length} due soon`}
-                  </span>
-                )}
-              </h2>
-              <p className="text-sm text-muted">{urgent.length ? "Payments coming up in the next 7 days." : "Nothing due this week. Next up:"}</p>
-            </div>
-            <Link href="/reminders" className="text-sm font-semibold text-brand hover:underline">Manage →</Link>
-          </div>
-          <ul className="mt-2">{shownReminders.map((r) => <ReminderRow key={r.id} r={r} today={today} currency={cur} />)}</ul>
-        </section>
-      )}
+      <ReminderSummary due={due} today={today} currency={cur} />
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Stat label="Total income" accent="text-brand" value={money(income, cur)} trend={change(income, prevIncome)} good="up" sub={`vs. ${money(prevIncome, cur)} last month`} />

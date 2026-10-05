@@ -2,7 +2,7 @@ import { FeedbackProvider } from "@/components/feedback";
 import { LogProvider } from "@/components/log-dialog";
 import { TopNav } from "@/components/top-nav";
 import { requireUser } from "@/lib/session";
-import { addDaysISO, todayPH } from "@/lib/reminders";
+import { addDaysISO, REMIND_DAYS, todayPH } from "@/lib/reminders";
 import type { Suggestion } from "@/components/log-dialog";
 
 export default async function AppLayout({ children }: LayoutProps<"/">) {
@@ -10,7 +10,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   const today = todayPH();
   const [recent, due] = await Promise.all([
     supabase.from("transactions").select("type, amount, category, description").neq("description", "").order("created_at", { ascending: false }).limit(300),
-    supabase.from("reminders").select("id", { count: "exact", head: true }).lte("due_date", addDaysISO(today, 3)),
+    supabase.from("reminders").select("id", { count: "exact", head: true }).eq("status", "active").lte("due_date", addDaysISO(today, REMIND_DAYS)),
   ]);
 
   // Latest entry wins for each type + description pair.
